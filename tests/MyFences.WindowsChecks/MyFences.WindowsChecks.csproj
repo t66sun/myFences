@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>disable</ImplicitUsings><ApplicationManifest>../../src/MyFences.App/app.manifest</ApplicationManifest></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/MyFences.App/MyFences.App.csproj" />
+  </ItemGroup>
+</Project>

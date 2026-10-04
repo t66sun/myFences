@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyFences.App/MyFences.App.csproj" />
+    <Project Path="src/MyFences.Core/MyFences.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyFences.Tests/MyFences.Tests.csproj" />
+    <Project Path="tests/MyFences.WindowsChecks/MyFences.WindowsChecks.csproj" />
+  </Folder>
+</Solution>

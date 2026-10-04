@@ -1,0 +1,13 @@
+.tools/
+.local/
+artifacts/
+**/bin/
+**/obj/
+*.user
+.vs/
+/release/*
+!/release/.gitkeep
+/research/**/artifacts/
+# Local reference checkouts keep their own upstream Git history and licenses.
+/research/projects/pickets/Pickets/
+/research/projects/desktop-fences/DesktopFences/

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/MyFences.ico</ApplicationIcon>
+    <AssemblyName>MyFences</AssemblyName>
+    <Version>0.1.2</Version>
+    <Description>Reference-based desktop organization for Windows 11</Description>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <StartupObject>MyFences.App.Program</StartupObject>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../MyFences.Core/MyFences.Core.csproj" /></ItemGroup>
+  <ItemGroup><Resource Include="Assets/MyFences.ico" /></ItemGroup>
+</Project>
