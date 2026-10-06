@@ -7,3 +7,5 @@ The local research directory contains reference checkouts of Pickets and Desktop
 Windows Shell/COM interop declarations describe Microsoft platform interfaces. File icons and context menus are supplied by Windows and associated installed applications.
 
 The portable application includes Microsoft .NET 10 runtime components under their applicable Microsoft/.NET licenses. Runtime license and notice files are retained in the publish directory. Unit tests use xUnit, Microsoft.NET.Test.Sdk, and the Visual Studio xUnit runner; test dependencies are not shipped in the application.
+
+The native desktop-menu DLL is compiled with llvm-mingw and statically links its C++ runtime. The toolchain's combined license notice is included as licenses/llvm-mingw/LICENSE.TXT. Build tools and signing private keys are not distributed.

@@ -1,4 +1,4 @@
-param([string]$Dotnet)
+param([string]$Dotnet, [string]$NativeCompiler, [string]$WindowsSdkBin, [string]$SigningCertificate)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Dotnet) {
@@ -40,7 +40,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Commit export failed.' }
     $sourceRoot = Join-Path $buildRoot 'source'
     Expand-Archive -LiteralPath $exportZip -DestinationPath $sourceRoot
-    & (Join-Path $sourceRoot 'scripts\publish.ps1') -Dotnet $Dotnet -OutputDirectory $output
+    if (-not $NativeCompiler) { $NativeCompiler = Join-Path $taskRoot '.local\desktop-menu-tools\llvm-mingw-20260922-ucrt-x86_64\bin\clang++.exe' }
+    if (-not $WindowsSdkBin) { $WindowsSdkBin = Join-Path $taskRoot '.local\desktop-menu-tools\windows-sdk\bin\10.0.28000.0\x64' }
+    if (-not $SigningCertificate) { $SigningCertificate = Join-Path $taskRoot '.local\desktop-menu-signing\MyFences.pfx' }
+    & (Join-Path $sourceRoot 'scripts\publish.ps1') -Dotnet $Dotnet -OutputDirectory $output -NativeCompiler $NativeCompiler -WindowsSdkBin $WindowsSdkBin -SigningCertificate $SigningCertificate
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $portable = Join-Path $output ('MyFences-' + $version + '-win-x64.zip')
     $source = Join-Path $output ('MyFences-' + $version + '-source.zip')
@@ -62,11 +65,13 @@ try {
             if ($entryHash -ne (Get-FileHash -LiteralPath (Join-Path $sourceRoot $entry.FullName) -Algorithm SHA256).Hash) { throw ('Source mismatch: ' + $entry.FullName) }
         }
     } finally { $archive.Dispose() }
+    $notes = Get-Content -LiteralPath (Join-Path $sourceRoot 'docs\CHANGELOG.md') -Raw
+    $section = [regex]::Match($notes, '(?ms)^## ' + [regex]::Escape($version) + '\r?\n.*?(?=^## |\z)')
+    if (-not $section.Success) { throw ('Missing committed release notes for ' + $version) }
     @(
         ('# MyFences ' + $tag), '', ('Commit: ' + $commit), '',
-        'Initial repository delivery: Windows desktop groups, layout persistence, undo, desktop icon recovery, Chinese/English UI and desktop integration diagnostics.', '',
-        'Project governance: six-directory layout, documented references, repository policy and commit-based portable/source packaging.', '',
-        'Validation: Release solution build, core test suite and development publish passed before commit. Delivery archives opened successfully; source entries match the clean commit export. See docs/VALIDATION.md for desktop integration evidence.'
+        $section.Value.Trim(), '',
+        'Delivery verification: both ZIPs opened successfully; source entries match the clean commit export. SHA-256 checksums are recorded in release.json.'
     ) | Set-Content -LiteralPath (Join-Path $output 'CHANGELOG.md') -Encoding utf8
     $record.files = @(('MyFences-' + $version + '-win-x64.zip'), ('MyFences-' + $version + '-source.zip'), 'CHANGELOG.md') | ForEach-Object {
         @{ path=$_; sha256=(Get-FileHash -LiteralPath (Join-Path $output $_) -Algorithm SHA256).Hash.ToLowerInvariant() }

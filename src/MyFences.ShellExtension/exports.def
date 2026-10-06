@@ -1,0 +1,4 @@
+LIBRARY MyFences.ShellExtension
+EXPORTS
+    DllGetClassObject
+    DllCanUnloadNow

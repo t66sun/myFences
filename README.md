@@ -1,4 +1,4 @@
-# MyFences 0.1.2 — Windows 11 桌面整理工具
+# MyFences 0.2.0 — Windows 11 桌面整理工具
 
 [English](README.en.md) · MIT · C# / WPF / .NET 10 · Windows 11 x64
 
@@ -18,14 +18,24 @@
 
 - 只有点击“整理桌面”才执行分类，没有后台自动分类。预置应用、文件夹、文档、图片规则；支持项目类型、扩展名与规则优先级，第一条匹配规则生效。
 - 手动分组与手动移出分区优先。右键文件选择“恢复规则管理”，或在设置中恢复全部，然后下一次整理才会重新分类。
-- 分区内支持多选、排序、分区间拖放；拖回空白桌面可解除分组。`Ctrl+A` 全选，`Ctrl+Z` 撤销分区操作，托盘菜单也提供撤销。撤销历史保留本次运行最近 50 次操作。
+- 分区内支持多选、排序、分区间拖放。拖回空白桌面时，桌面原有图标按分区顺序排列在松手位置附近，避开已有图标；拖动时显示落点预览。从其他文件夹加入的引用只解除分组，不移动文件、不创建快捷方式。`Ctrl+A` 全选，`Ctrl+Z` 或托盘“撤销”可一次撤回整批操作，包括图标位置的恢复记录。撤销历史保留本次运行最近 50 次操作。
 - 双击通过 Windows 默认应用打开；右键显示 Windows 文件菜单和分区操作。文件被重命名时更新引用；缺失文件显示淡化图标，可移出分区。
-- 拖出到资源管理器或其他应用使用标准 Windows 文件拖放，可能复制、移动或创建快捷方式。**分区撤销不会撤销这些物理文件操作。**
+- 拖到资源管理器或其他应用使用标准 Windows 文件拖放，可能复制、移动或创建快捷方式。拖到桌面空白处始终执行上述解除分组操作。**分区撤销不会撤销其他应用执行的物理文件操作。**
 - 设置提供中英文、颜色、透明度和快捷键。外观变化应用于全部分区。
 
 ## 保存与恢复
 
 布局保存在 `%LOCALAPPDATA%\MyFences\layout.json`。图标位置与桌面设置在修改前记录到同目录的 `desktop-recovery.json`。正常退出恢复并删除恢复记录；异常退出后下次启动先恢复，再加载布局。
+
+已拖回桌面的图标不再由恢复记录退回旧位置。退出仍恢复原有自动排列及网格设置；如果 Windows 自动排列开启，系统可能重新排列图标。
+
+## 桌面右键新建分区
+
+在设置的“桌面右键菜单”页中点击“启用 / 更新当前位置”，可将“新建 MyFences 分区”加入 Windows 11 桌面首层菜单。命名后在执行菜单命令时的鼠标位置附近创建，并短暂突出显示；取消命名不创建分区。程序已经运行时命令转交主实例，没有运行时会启动程序。
+
+本版附带个人自签身份包。首次启用菜单前，需查看随包公开证书并以管理员身份明确运行 `trust-desktop-menu-certificate.ps1`，将该项目证书加入本机 TrustedPeople；菜单注册本身仅作用于当前用户，不要求开发模式。普通分区功能仍无需管理员权限。
+
+移动整个便携文件夹后，从新位置启动并再次点击“启用 / 更新当前位置”。“移除桌面菜单”会注销菜单身份包，保留布局和已信任证书。不要只移动 EXE，菜单还需要同目录的 DLL、MSIX 和资源。
 
 需要单独恢复时，先结束仍在运行的 MyFences，再在程序所在目录运行：
 
@@ -45,7 +55,9 @@ dotnet test tests/MyFences.Tests -c Release
 .\scripts\release.ps1
 ```
 
-本地交付脚本从已提交的干净内容构建，在 `release/v0.1.2/` 生成便携版 ZIP、源码 ZIP、变更说明和记录 commit 与 SHA-256 的 `release.json`。开发中只打包当前工作区时使用 `scripts/publish.ps1`，输出位于被忽略的 `.local/`。便携版附带 .NET 运行时，未启用 WPF 不支持的裁剪。
+本地交付脚本从已提交的干净内容构建，在 `release/v0.2.0/` 生成便携版 ZIP、源码 ZIP、变更说明和记录 commit 与 SHA-256 的 `release.json`。开发中只打包当前工作区时使用 `scripts/publish.ps1`，输出位于被忽略的 `.local/`。便携版附带 .NET 运行时，未启用 WPF 不支持的裁剪。
+
+打包含首层菜单的版本还需 llvm-mingw x64 C++ 编译器、Windows SDK MakeAppx/SignTool 和本地签名 PFX。可向 publish/release 脚本传 `-NativeCompiler`、`-WindowsSdkBin`、`-SigningCertificate` 指定路径。私钥不进入源码或交付包；默认路径见 `scripts/build-desktop-menu.ps1`。
 
 目录职责与后续提交政策见 [AGENTS.md](AGENTS.md)，设计说明见 [docs/DESIGN.md](docs/DESIGN.md)。研究笔记位于 `research/`；参考项目克隆仅保留在本地，不作为子模块提交。没有授权时不推送远端；`push` 授权不包含 Git tag 或 GitHub Release。
 
@@ -66,6 +78,6 @@ dotnet run --project tests/MyFences.WindowsChecks -c Release
 
 ## 版本范围与验证
 
-已验证的内容见 [验收记录](docs/VALIDATION.md)。当前支持 Windows 11 x64 单显示器。多显示器、虚拟桌面配置、文件夹门户、搜索、后台分类、安装器和自动更新未包含在 0.1 中。完整外部拖放矩阵、Explorer 重启以及所有系统 DPI 档位仍需实机验收。
+已验证的内容见 [验收记录](docs/VALIDATION.md)。当前支持 Windows 11 x64 单显示器。多显示器、虚拟桌面配置、文件夹门户、搜索、后台分类、完整应用安装器和自动更新未包含在 0.2 中。完整外部拖放矩阵、Explorer 重启以及其他系统 DPI 档位仍需实机验收。
 
 程序与源码使用 [MIT License](LICENSE)。参考项目与系统依赖说明见 [THIRD_PARTY.md](THIRD_PARTY.md)。本项目独立实现，不与 Stardock 关联。

@@ -1,4 +1,4 @@
-param([string]$Dotnet, [string]$OutputDirectory)
+param([string]$Dotnet, [string]$OutputDirectory, [string]$NativeCompiler, [string]$WindowsSdkBin, [string]$SigningCertificate)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Dotnet) {
@@ -30,6 +30,18 @@ foreach ($name in @('README.md','README.en.md','LICENSE','THIRD_PARTY.md')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot $name) -Destination $output -Force
 }
 Copy-Item -LiteralPath (Join-Path $taskRoot 'docs') -Destination $output -Recurse -Force
+if (Test-Path -LiteralPath (Join-Path $taskRoot 'src\MyFences.ShellExtension\DesktopCommand.cpp')) {
+    $menuBuild = Join-Path $OutputDirectory 'desktop-menu-build'
+    $menuOptions = @{ OutputDirectory=$menuBuild }
+    if ($NativeCompiler) { $menuOptions.Compiler=$NativeCompiler }
+    if ($WindowsSdkBin) { $menuOptions.SdkBin=$WindowsSdkBin }
+    if ($SigningCertificate) { $menuOptions.CertificatePath=$SigningCertificate }
+    & (Join-Path $taskRoot 'scripts\build-desktop-menu.ps1') @menuOptions
+    foreach ($name in @('MyFences.ShellExtension.dll','MyFences.DesktopMenu.msix','MyFences.DesktopMenu.cer','trust-desktop-menu-certificate.ps1','Assets')) {
+        Copy-Item -LiteralPath (Join-Path $menuBuild $name) -Destination $output -Recurse -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $menuBuild 'licenses\llvm-mingw') -Destination (Join-Path $output 'licenses') -Recurse -Force
+}
 $zip = Join-Path $OutputDirectory ('MyFences-' + $version + '-win-x64.zip')
 Compress-Archive -Path (Join-Path $output '*') -DestinationPath $zip -Force
 

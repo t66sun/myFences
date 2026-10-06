@@ -11,6 +11,8 @@ using Forms = System.Windows.Forms;
 
 namespace MyFences.App;
 
+internal sealed record DesktopDropPlan(string[] Paths, List<DesktopScreenCoordinate> DesktopCoordinates, int ReferenceCount, ScreenPoint DropPoint, ScreenBounds WorkArea, ScreenPoint Spacing);
+
 internal sealed class AppController : IDisposable
 {
     private readonly Application _app;
@@ -27,12 +29,15 @@ internal sealed class AppController : IDisposable
     private nint _host;
     private bool _visible = true, _quitting, _disposed;
     private SettingsWindow? _settingsWindow;
+    private DesktopDropPreview? _dropPreview;
+    private List<DesktopIcon>? _dragDesktop;
+    private List<ScreenBounds>? _dragOccupied;
     public AppState State { get; private set; }
     public bool Preview => _preview;
     public bool CanUndo => _history.CanUndo;
     public ItemDrag? ActiveDrag { get; set; }
 
-    public AppController(Application app, bool preview)
+    public AppController(Application app, bool preview, bool suppressInitialSettings = false)
     {
         _app = app; _preview = preview;
         _store = new(Program.DataDirectory); _session = new(Program.DataDirectory);
@@ -58,7 +63,7 @@ internal sealed class AppController : IDisposable
         _timer.Tick += (_, _) => Tick(); _timer.Start();
         _app.SessionEnding += (_, _) => { if (!_preview && _session.Active) _session.Restore(_shell!); };
         _app.DispatcherUnhandledException += (_, e) => { e.Handled = true; Report(e.Exception); };
-        if (State.Groups.Count == 0 || preview) ShowSettings();
+        if (!suppressInitialSettings && (State.Groups.Count == 0 || preview)) ShowSettings();
     }
 
     private void CreatePreview()
@@ -93,40 +98,66 @@ internal sealed class AppController : IDisposable
         return true;
     }
 
-    private void Commit(Action<AppState> change, bool undoable = true)
+    private bool Commit(Action<AppState> change, bool undoable = true, IReadOnlyList<DesktopCoordinate>? releaseCoordinates = null, IReadOnlyList<DesktopCoordinate>? captureCoordinates = null)
     {
         var before = State.Clone(); var next = State.Clone(); change(next);
         var activeBefore = _session.Active;
+        var affectedPaths = (releaseCoordinates ?? []).Concat(captureCoordinates ?? []).Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var originalCoordinates = _session.OriginalCoordinates(affectedPaths).ToList();
+        if (!_preview && affectedPaths.Count != 0)
+            foreach (var icon in _shell!.Enumerate().Where(i => affectedPaths.Contains(i.Path) && !originalCoordinates.Any(p => string.Equals(p.Path, i.Path, StringComparison.OrdinalIgnoreCase))))
+                originalCoordinates.Add(new(icon.Path, icon.X, icon.Y));
         try
         {
             // Attach every destination window before changing any native icon.
             Render(next);
-            if (!EnsureManagement(next)) { Render(before); return; }
+            if (!EnsureManagement(next)) { Render(before); return false; }
             if (!_preview) _store.Save(next);
-            if (!_preview && _session.Active) _session.Synchronize(next, _shell!);
+            if (!_preview && _session.Active) _session.Synchronize(next, _shell!, releaseCoordinates, captureCoordinates);
             State = next;
-            if (undoable) _history.Record(before);
+            if (undoable) _history.Record(before, originalCoordinates);
             Text.Language = State.Settings.Language;
             Render(); BuildTray(); UpdateWatchers();
+            return true;
         }
         catch
         {
             State = before;
-            if (!_preview)
+            try
             {
-                if (!activeBefore && _session.Active) _session.Restore(_shell!);
-                else if (_session.Active) _session.Synchronize(before, _shell!);
-                _store.Save(before);
+                if (!_preview)
+                {
+                    if (!activeBefore && _session.Active) _session.Restore(_shell!);
+                    else if (_session.Active) _session.Synchronize(before, _shell!, originalCoordinates, originalCoordinates);
+                }
             }
-            Render(); throw;
+            finally { if (!_preview) _store.Save(before); Render(); }
+            throw;
         }
     }
 
     public void NewGroup()
+        => CreateGroup(null);
+    public void NewGroupAt(int screenX, int screenY)
+        => CreateGroup(new Interop.Point(screenX, screenY));
+    private void CreateGroup(Interop.Point? screenPoint)
     {
         var name = NameDialog.Ask(Text.Get("new"), Text.Get("groupName"), Text.Get("new") + " " + (State.Groups.Count + 1));
         if (name is null) return;
-        Commit(state => { var group = new FenceGroup { Name = name, X = 80 + state.Groups.Count % 2 * 380, Y = 70 + state.Groups.Count % 3 * 80, Color = state.Settings.DefaultColor, Opacity = state.Settings.DefaultOpacity }; Clamp(group); state.Groups.Add(group); });
+        var id = Guid.NewGuid();
+        if (!Commit(state =>
+        {
+            var group = new FenceGroup { Id = id, Name = name, X = 80 + state.Groups.Count % 2 * 380, Y = 70 + state.Groups.Count % 3 * 80, Color = state.Settings.DefaultColor, Opacity = state.Settings.DefaultOpacity };
+            if (screenPoint is { } point)
+            {
+                var window = _windows.Values.FirstOrDefault();
+                var handle = window is null ? _host : new WindowInteropHelper(window).Handle;
+                var location = Native.ScreenToDip(point, handle); group.X = location.X + 12; group.Y = location.Y + 12;
+            }
+            Clamp(group); state.Groups.Add(group);
+        })) return;
+        SetVisible(true);
+        _windows[id].Highlight();
     }
     public void Rename(Guid id)
     {
@@ -153,8 +184,9 @@ internal sealed class AppController : IDisposable
     public void Undo()
     {
         if (!_history.CanUndo) return;
-        var restored = _history.Undo();
-        Commit(state => { state.Groups = restored.Groups; state.Items = restored.Items; state.Rules = restored.Rules; state.Settings = restored.Settings; }, false);
+        var transaction = _history.Peek(); var restored = transaction.State;
+        if (Commit(state => { state.Groups = restored.Groups; state.Items = restored.Items; state.Rules = restored.Rules; state.Settings = restored.Settings; }, false, captureCoordinates: transaction.DesktopCoordinates))
+        { _history.RemoveLast(); BuildTray(); }
     }
     public AppState BeginLayoutEdit() => State.Clone();
     public void FinishLayoutEdit(AppState before)
@@ -188,9 +220,50 @@ internal sealed class AppController : IDisposable
     public bool IsDesktopDrop(Interop.Point point)
     {
         if (!DesktopShell.IsBareDesktop(point) || _preview) return false;
-        var hwnd = Native.WindowFromPoint(point); var client = point; Native.MapWindowPoints(0, hwnd, ref client, 1);
-        return !_shell!.HitTestIcon(client);
+        return !_shell!.HitTestIcon(_shell.ScreenToView(point));
     }
+    internal DesktopDropPlan? PlanDesktopDrop(IEnumerable<string> paths, Interop.Point point, bool useDragSnapshot = false)
+    {
+        if (!IsDesktopDrop(point)) return null;
+        var ordered = Grouping.OrderSelection(State, paths);
+        var desktop = useDragSnapshot && _dragDesktop is not null ? _dragDesktop : _shell!.Enumerate();
+        var desktopPaths = desktop.Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var nativePaths = ordered.Where(desktopPaths.Contains).ToArray();
+        var spacing = _shell!.Spacing; var cell = new ScreenPoint(Math.Max(32, spacing.X), Math.Max(32, spacing.Y));
+        var work = DesktopShell.WorkArea(point);
+        var positions = DesktopPlacement.Plan(new(point.X, point.Y), work, cell,
+            useDragSnapshot && _dragOccupied is not null ? _dragOccupied : _shell.OccupiedScreenAreas(), nativePaths.Length);
+        if (positions.Count != nativePaths.Length) return null;
+        var placed = nativePaths.Select((path, index) => new DesktopScreenCoordinate(path, positions[index].X, positions[index].Y)).ToList();
+        return new(ordered, placed, ordered.Length - nativePaths.Length, new(point.X, point.Y), work, cell);
+    }
+    internal bool DropReferencesOnDesktop(IEnumerable<string> paths, Interop.Point point)
+    {
+        var plan = PlanDesktopDrop(paths, point);
+        if (plan is null || plan.Paths.Length == 0) return false;
+        var nativeCoordinates = plan.DesktopCoordinates.Select(i =>
+        {
+            var view = _shell!.ScreenToView(new(i.X, i.Y)); return new DesktopCoordinate(i.Path, view.X, view.Y);
+        }).ToList();
+        return Commit(state => Grouping.Assign(state, plan.Paths, null), releaseCoordinates: nativeCoordinates);
+    }
+    internal void BeginDesktopDrag(string[] paths)
+    {
+        if (_preview) return;
+        _dragDesktop = _shell!.Enumerate(); _dragOccupied = _shell.OccupiedScreenAreas();
+        _dropPreview = new(() =>
+        {
+            try
+            {
+                if (!Native.GetCursorPos(out var point)) { _dropPreview?.Hide(); return; }
+                var plan = PlanDesktopDrop(paths, point, true);
+                if (plan is null) _dropPreview?.Hide(); else _dropPreview?.Update(plan);
+            }
+            catch (COMException) { _dropPreview?.Hide(); }
+        });
+    }
+    internal void EndDesktopDrag()
+    { _dropPreview?.Close(); _dropPreview = null; _dragDesktop = null; _dragOccupied = null; }
     public void HandleExternalMove(IEnumerable<string> paths)
     {
         var gone = paths.Where(p => !File.Exists(p) && !Directory.Exists(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -319,6 +392,7 @@ internal sealed class AppController : IDisposable
     {
         if (_disposed) return; _disposed = true;
         _timer.Stop();
+        EndDesktopDrag();
         Native.UnregisterHotKey(_messages.Handle, 1); _messages.Dispose();
         foreach (var watcher in _watchers.Values) watcher.Dispose();
         foreach (var window in _windows.Values) { window.AllowClose = true; window.Close(); }

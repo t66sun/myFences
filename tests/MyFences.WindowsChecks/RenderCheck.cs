@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -31,6 +32,14 @@ internal static class RenderCheck
                 {
                     Save(settings, Path.Combine(output, $"settings-{language}-{scale}.png"), scale);
                     results.Add($"Settings {language} render scale {scale}");
+                }
+                var tabs = ((Grid)settings.Content).Children.OfType<TabControl>().Single();
+                tabs.SelectedIndex = 2;
+                settings.UpdateLayout();
+                foreach (var scale in new[] { 1d, 1.25, 1.5, 2d })
+                {
+                    Save(settings, Path.Combine(output, $"desktop-menu-{language}-{scale}.png"), scale);
+                    results.Add($"Desktop menu {language} render scale {scale}");
                 }
                 settings.Close();
                 foreach (var group in controller.State.Groups)

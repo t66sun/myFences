@@ -15,7 +15,7 @@ internal static class NameDialog
         var cancel = Theme.Button(Text.Get("close"), () => window.DialogResult = false); cancel.IsCancel = true;
         input.TextChanged += (_, _) => accept.IsEnabled = input.Text.Trim().Length > 0;
         actions.Children.Add(cancel); actions.Children.Add(accept); panel.Children.Add(actions); window.Content = panel;
-        window.Loaded += (_, _) => { input.Focus(); input.SelectAll(); };
+        window.Loaded += (_, _) => { window.Activate(); input.Focus(); input.SelectAll(); };
         return window.ShowDialog() == true ? input.Text.Trim() : null;
     }
 }

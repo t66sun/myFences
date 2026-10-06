@@ -106,6 +106,17 @@ internal sealed class SettingsWindow : Window
         resume.HorizontalAlignment = HorizontalAlignment.Left; resume.Margin = new Thickness(0, 18, 0, 0); appearance.Children.Add(resume);
         appearanceTab.Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = appearance }; tabs.Items.Add(appearanceTab);
 
+        var desktopTab = new TabItem { Header = Text.Get("menuTab") };
+        var desktopPanel = new StackPanel { Margin = new Thickness(16) };
+        var menuHint = Theme.Label(Text.Get("menuHint"), 12, true); menuHint.TextWrapping = TextWrapping.Wrap; desktopPanel.Children.Add(menuHint);
+        var menuStatus = Theme.Label(Interop.DesktopMenu.Status(), 12); menuStatus.Margin = new Thickness(0, 18, 0, 18); menuStatus.TextWrapping = TextWrapping.Wrap; desktopPanel.Children.Add(menuStatus);
+        var menuActions = new StackPanel { Orientation = Orientation.Horizontal };
+        var enableMenu = Theme.Button(Text.Get("menuEnable"), () => controller.Safe(() => { Interop.DesktopMenu.Enable(); menuStatus.Text = Interop.DesktopMenu.Status(); }));
+        var disableMenu = Theme.Button(Text.Get("menuDisable"), () => controller.Safe(() => { Interop.DesktopMenu.Disable(); menuStatus.Text = Interop.DesktopMenu.Status(); }));
+        enableMenu.IsEnabled = disableMenu.IsEnabled = !controller.Preview;
+        menuActions.Children.Add(enableMenu); menuActions.Children.Add(disableMenu); desktopPanel.Children.Add(menuActions);
+        desktopTab.Content = desktopPanel; tabs.Items.Add(desktopTab);
+
         var footer = new Grid { Margin = new Thickness(0, 18, 0, 0) };
         footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var meta = Theme.Label(Text.Get("footer"), 11, true); meta.VerticalAlignment = VerticalAlignment.Center; footer.Children.Add(meta);

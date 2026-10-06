@@ -10,6 +10,8 @@ internal sealed class DesktopShell : IDisposable
     private readonly List<object> _objects = [];
     private IFolderView2 _view = null!;
     private nint _desktopPidl;
+    private nint _viewWindow;
+    public nint ViewWindow => _viewWindow;
     public const uint ManagedFlags = 0x5;
 
     public DesktopShell()
@@ -29,6 +31,8 @@ internal sealed class DesktopShell : IDisposable
             _objects.Add(browser);
             Check(((IShellBrowser)browser).QueryActiveShellView(out var view));
             _objects.Add(view); _view = (IFolderView2)view;
+            _viewWindow = Native.FindWindowEx(DesktopHost.FindHost(), 0, "SysListView32", null);
+            if (_viewWindow == 0) throw new InvalidOperationException("The visible desktop icon window could not be found.");
             var folderIid = typeof(IShellFolder).GUID;
             Check(_view.GetFolder(ref folderIid, out pointer));
             object folder;
@@ -40,10 +44,40 @@ internal sealed class DesktopShell : IDisposable
     }
     internal static void Check(int hr) { if (hr < 0) Marshal.ThrowExceptionForHR(hr); }
     public uint Flags { get { Check(_view.GetCurrentFolderFlags(out var flags)); return flags; } }
+    public Point Spacing { get { Check(_view.GetSpacing(out var spacing)); return spacing; } }
+    public Point ScreenToView(Point point) { Native.MapWindowPoints(0, _viewWindow, ref point, 1); return point; }
+    public Point ViewToScreen(Point point) { Native.MapWindowPoints(_viewWindow, 0, ref point, 1); return point; }
+    public static ScreenBounds WorkArea(Point screenPoint)
+    {
+        var bounds = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(screenPoint.X, screenPoint.Y)).WorkingArea;
+        return new(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+    }
+    public List<ScreenBounds> OccupiedScreenAreas()
+    {
+        var spacing = Spacing; var bounds = WorkArea(ViewToScreen(new(0, 0))); var result = new List<ScreenBounds>();
+        foreach (var position in IconPositions())
+        {
+            var point = ViewToScreen(position);
+            var area = new ScreenBounds(point.X - 12, point.Y - 8, point.X + spacing.X, point.Y + spacing.Y);
+            if (area.Intersects(bounds)) result.Add(area);
+        }
+        return result;
+    }
+    private List<Point> IconPositions()
+    {
+        Check(_view.ItemCount(2, out var count)); var result = new List<Point>();
+        for (var index = 0; index < count; index++)
+        {
+            Check(_view.Item(index, out var child));
+            try { Check(_view.GetItemPosition(child, out var point)); result.Add(point); }
+            finally { if (child != 0) Native.ILFree(child); }
+        }
+        return result;
+    }
     public bool HitTestIcon(Point point)
     {
-        Check(_view.GetSpacing(out var spacing));
-        return Enumerate().Any(i => i.X >= 0 && i.Y >= 0 && point.X >= i.X - 12 && point.X < i.X + spacing.X && point.Y >= i.Y - 8 && point.Y < i.Y + spacing.Y);
+        var spacing = Spacing;
+        return IconPositions().Any(i => point.X >= i.X - 12 && point.X < i.X + spacing.X && point.Y >= i.Y - 8 && point.Y < i.Y + spacing.Y);
     }
     public void SetManagedFlags(uint flags) => Check(_view.SetCurrentFolderFlags(ManagedFlags, flags & ManagedFlags));
     public List<DesktopIcon> Enumerate()

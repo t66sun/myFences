@@ -29,6 +29,7 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(nint hwnd, int id);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
+    [DllImport("user32.dll")] internal static extern bool EnableWindow(nint hwnd, bool enabled);
     [DllImport("user32.dll")] internal static extern nint ChildWindowFromPointEx(nint parent, Point point, uint flags);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] internal static extern int SHParseDisplayName(string name, nint bind, out nint pidl, uint flags, out uint attributes);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] internal static extern bool SHGetPathFromIDListEx(nint pidl, StringBuilder path, uint maximum, uint flags);
@@ -42,10 +43,15 @@ internal static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern bool AppendMenu(nint menu, uint flags, nuint id, string? text);
     [DllImport("user32.dll")] internal static extern uint TrackPopupMenuEx(nint menu, uint flags, int x, int y, nint hwnd, nint parameters);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] internal static extern bool DestroyIcon(nint icon);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] internal static extern nint SHGetFileInfo(string path, uint attributes, out ShellFileInfo info, uint size, uint flags);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct ShellFileInfo
     { public nint Icon; public int IconIndex; public uint Attributes; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName; }
+
+    internal static double DpiScale(nint window) { var dpi = window == 0 ? 96u : GetDpiForWindow(window); return (dpi == 0 ? 96 : dpi) / 96d; }
+    internal static System.Windows.Point ScreenToDip(Point point, nint window) { var scale = DpiScale(window); return new(point.X / scale, point.Y / scale); }
+    internal static Point DipToScreen(double x, double y, nint window) { var scale = DpiScale(window); return new((int)Math.Round(x * scale), (int)Math.Round(y * scale)); }
 }
 
 [ComImport, Guid("85CB6900-4D95-11CF-960C-0080C7F4EE85"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

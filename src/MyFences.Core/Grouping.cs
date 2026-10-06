@@ -5,6 +5,12 @@ public static class Grouping
     public static string Normalize(string path) => System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));
     public static ItemReference? Find(AppState state, string path) => state.Items.FirstOrDefault(i => string.Equals(i.Path, Normalize(path), StringComparison.OrdinalIgnoreCase));
 
+    public static string[] OrderSelection(AppState state, IEnumerable<string> paths)
+    {
+        var selected = paths.Select(Normalize).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return state.Items.Where(i => selected.Contains(i.Path)).Select(i => i.Path).ToArray();
+    }
+
     public static void Assign(AppState state, IEnumerable<string> paths, Guid? groupId, int? insertionIndex = null)
     {
         if (groupId.HasValue && !state.Groups.Any(g => g.Id == groupId)) throw new ArgumentException("Unknown group.", nameof(groupId));
@@ -58,23 +64,30 @@ public static class Grouping
 
 public sealed class UndoHistory
 {
-    private readonly List<AppState> _undo = [];
+    private readonly List<UndoRecord> _undo = [];
     public bool CanUndo => _undo.Count > 0;
-    public void Record(AppState before)
+    public void Record(AppState before, IEnumerable<DesktopCoordinate>? desktopCoordinates = null)
     {
-        _undo.Add(before.Clone());
+        _undo.Add(new(before.Clone(), desktopCoordinates?.ToList() ?? []));
         if (_undo.Count > 50) _undo.RemoveAt(0);
     }
-    public AppState Undo() => _undo.Count == 0 ? throw new InvalidOperationException("Nothing to undo.") : TakeLast();
+    public UndoRecord Peek() => _undo.Count == 0 ? throw new InvalidOperationException("Nothing to undo.") : _undo[^1];
+    public void RemoveLast() { if (_undo.Count != 0) _undo.RemoveAt(_undo.Count - 1); }
+    public AppState Undo() { var record = Peek(); RemoveLast(); return record.State; }
     public void RenamePath(string oldPath, string newPath)
     {
-        foreach (var state in _undo)
-            foreach (var item in state.Items.Where(i => string.Equals(i.Path, oldPath, StringComparison.OrdinalIgnoreCase))) item.Path = newPath;
+        foreach (var record in _undo)
+        {
+            foreach (var item in record.State.Items.Where(i => string.Equals(i.Path, oldPath, StringComparison.OrdinalIgnoreCase))) item.Path = newPath;
+            for (var index = 0; index < record.DesktopCoordinates.Count; index++)
+                if (string.Equals(record.DesktopCoordinates[index].Path, oldPath, StringComparison.OrdinalIgnoreCase)) record.DesktopCoordinates[index] = record.DesktopCoordinates[index] with { Path = newPath };
+        }
     }
     public void ForgetPaths(IEnumerable<string> paths)
     {
         var removed = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var state in _undo) state.Items.RemoveAll(i => removed.Contains(i.Path));
+        foreach (var record in _undo) { record.State.Items.RemoveAll(i => removed.Contains(i.Path)); record.DesktopCoordinates.RemoveAll(i => removed.Contains(i.Path)); }
     }
-    private AppState TakeLast() { var state = _undo[^1]; _undo.RemoveAt(_undo.Count - 1); return state; }
 }
+
+public sealed record UndoRecord(AppState State, List<DesktopCoordinate> DesktopCoordinates);

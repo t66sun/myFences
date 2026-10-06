@@ -14,6 +14,9 @@ internal static class Program
         }
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         if (args.Contains("--desktop-view")) return app.Run(new DesktopView());
+        if (args.Contains("--menu-command-check")) return MenuCommandCheck.Run(app);
+        if (args.Contains("--desktop-drop-check")) return DesktopDropCheck.Run(app);
+        if (args.Length == 3 && args[0] == "--desktop-menu-check") return DesktopMenuCheck.Run(app, args[1], args[2]);
         return args.Contains("--render-check") ? RenderCheck.Run(app) :
             args.Contains("--controller-check") ? ControllerCheck.Run(app) : MyFences.App.IntegrationCheck.Run(app);
     }

@@ -11,11 +11,11 @@
 | --- | --- |
 | 项目名称 | MyFences |
 | 必需额外目录/根部文件及原因 | 根部 README.md、README.en.md、LICENSE、THIRD_PARTY.md 为入口和许可；AGENTS.md、.gitignore、Directory.Build.props、MyFences.slnx 为治理及构建配置。.tools/ 保留本地 SDK 与 NuGet 缓存，.local/ 保留诊断和构建缓存，均忽略。研究项目的上游克隆保留在本地并忽略，仅提交来源说明。 |
-| 版本来源、格式和既有自动机制 | src/MyFences.App/MyFences.App.csproj 的 Version，SemVer；无自动升版。已有本地版本 0.1.1，本次初始 Git 交付为 0.1.2。 |
+| 版本来源、格式和既有自动机制 | src/MyFences.App/MyFences.App.csproj 的 Version，SemVer；无自动升版。初始 Git 交付为 0.1.2；本次新功能交付为 0.2.0。 |
 | 适用验证命令及工作目录 | 仓库根目录：dotnet build MyFences.slnx -c Release；dotnet test tests/MyFences.Tests -c Release。无全局 SDK 时使用 .tools/dotnet/dotnet.exe。涉及桌面互操作时运行 WindowsChecks，诊断使用独立 .local 数据目录。 |
-| 发行构建命令及工作目录 | 仓库根目录：scripts/publish.ps1；默认使用本地 SDK，自包含 win-x64 单文件发布。开发输出位于 .local/publish-v<version>。 |
+| 发行构建命令及工作目录 | 仓库根目录：scripts/publish.ps1；默认使用本地 SDK，自包含 win-x64 单文件发布。开发输出位于 .local/publish-v<version>。首层菜单另需 llvm-mingw x64、Windows SDK MakeAppx/SignTool、本地签名 PFX；可传 -NativeCompiler、-WindowsSdkBin、-SigningCertificate，默认路径见 scripts/build-desktop-menu.ps1。私钥仅在忽略的 .local 中，交付只附公开 CER。 |
 | 发行打包命令、交付文件；没有则源码 ZIP | 仓库根目录：scripts/release.ps1；从 HEAD 导出干净源码，生成 release/v<version>/ 中的便携 ZIP、源码 ZIP、CHANGELOG.md 和 release.json（完整 commit、UTC 时间及 SHA-256）。 |
-| 已配置远端、仓库和目标分支；没有则未配置 | origin = https://github.com/t66sun/myFences.git，main。本次用户授权初始化提交并 push；没有授权 tag 或 GitHub Release，后续远端操作需依据当次授权。 |
+| 已配置远端、仓库和目标分支；没有则未配置 | origin = https://github.com/t66sun/myFences.git，main。用户已授权 0.2.0 的 commit、push、对应 tag、GitHub Release 和交付附件上传；后续版本依据当次授权。 |
 
 ## 目录与接入
 

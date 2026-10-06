@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Markup;
+using System.Windows.Threading;
 using MyFences.App.Interop;
 using MyFences.Core;
 
@@ -41,6 +42,7 @@ internal sealed class FenceWindow : Window
     private System.Windows.Point _mouseStart;
     private IconItem? _pressedItem;
     private bool _preserveMulti, _dragging, _cancelled;
+    private Interop.Point? _desktopRelease;
     private ListBoxItem? _insertionTarget;
     private int _insertionIndex;
     public bool AllowClose { get; set; }
@@ -102,7 +104,15 @@ internal sealed class FenceWindow : Window
         _items.MouseDoubleClick += (_, e) => { if (Container(e.OriginalSource as DependencyObject)?.DataContext is IconItem item) controller.Safe(() => controller.Open(item.Path)); e.Handled = true; };
         _items.PreviewMouseRightButtonDown += (_, e) => { if (Container(e.OriginalSource as DependencyObject)?.DataContext is IconItem item && !_items.SelectedItems.Contains(item)) { _items.SelectedItems.Clear(); _items.SelectedItem = item; } };
         _items.MouseRightButtonUp += (_, e) => { var paths = SelectedPaths(); if (paths.Length > 0) { controller.Safe(() => ShowItemMenu(paths)); e.Handled = true; } };
-        QueryContinueDrag += (_, e) => { if (e.EscapePressed) _cancelled = true; };
+        QueryContinueDrag += (_, e) =>
+        {
+            if (e.EscapePressed) { _cancelled = true; _controller.EndDesktopDrag(); return; }
+            if ((e.KeyStates & DragDropKeyStates.LeftMouseButton) != 0 || !Native.GetCursorPos(out var point)) return;
+            if (!_controller.IsDesktopDrop(point)) return;
+            // Explorer must not receive a filesystem Drop on bare desktop: an external reference
+            // is removed from this group only. Other Windows targets retain the standard FileDrop.
+            _desktopRelease = point; e.Action = DragAction.Cancel; e.Handled = true;
+        };
         PreviewKeyDown += (_, e) =>
         {
             if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.A) { _items.SelectAll(); e.Handled = true; }
@@ -131,10 +141,17 @@ internal sealed class FenceWindow : Window
     {
         Width = _group.Width; Height = _group.Collapsed ? 36 : _group.Height;
         if (_preview || !IsLoaded) { Left = _group.X; Top = _group.Y; return; }
-        var handle = new WindowInteropHelper(this).Handle; var dpi = VisualTreeHelper.GetDpi(this);
-        var point = new Interop.Point((int)Math.Round(_group.X * dpi.DpiScaleX), (int)Math.Round(_group.Y * dpi.DpiScaleY));
+        var handle = new WindowInteropHelper(this).Handle; var scale = Native.DpiScale(handle);
+        var point = Native.DipToScreen(_group.X, _group.Y, handle);
         Native.MapWindowPoints(0, Native.GetParent(handle), ref point, 1);
-        Native.SetWindowPos(handle, 0, point.X, point.Y, (int)Math.Round(Width * dpi.DpiScaleX), (int)Math.Round(Height * dpi.DpiScaleY), 0x14);
+        Native.SetWindowPos(handle, 0, point.X, point.Y, (int)Math.Round(Width * scale), (int)Math.Round(Height * scale), 0x14);
+    }
+    internal void Highlight()
+    {
+        _surface.BorderBrush = Theme.Accent; _surface.BorderThickness = new Thickness(2);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
+        timer.Tick += (_, _) => { timer.Stop(); _surface.BorderThickness = new Thickness(1); ClearInsertion(); };
+        timer.Start();
     }
     private static Thumb Thumb(Cursor cursor) => new() { Cursor = cursor, Background = Brushes.Transparent, Template = (ControlTemplate)XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Thumb'><Border Background='{TemplateBinding Background}' /></ControlTemplate>") };
     private Button GlyphButton(string glyph, string label, Action action)
@@ -181,7 +198,7 @@ internal sealed class FenceWindow : Window
         }
         else _controller.ItemMenu(this, paths);
     }
-    private string[] SelectedPaths() => _items.SelectedItems.Cast<IconItem>().Select(i => i.Path).ToArray();
+    private string[] SelectedPaths() => _items.Items.Cast<IconItem>().Where(_items.SelectedItems.Contains).Select(i => i.Path).ToArray();
     private static ListBoxItem? Container(DependencyObject? node)
     {
         while (node is not null && node is not ListBoxItem) node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
@@ -199,19 +216,21 @@ internal sealed class FenceWindow : Window
         var current = e.GetPosition(_items);
         if (Math.Abs(current.X - _mouseStart.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(current.Y - _mouseStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         var paths = SelectedPaths().Where(p => File.Exists(p) || Directory.Exists(p)).ToArray(); if (paths.Length == 0) return;
-        var drag = new ItemDrag(paths); _controller.ActiveDrag = drag; _dragging = true; _cancelled = false;
+        var drag = new ItemDrag(paths); _controller.ActiveDrag = drag; _dragging = true; _cancelled = false; _desktopRelease = null;
         try
         {
+            _controller.BeginDesktopDrag(paths);
             var data = new DataObject(); data.SetData(DataFormats.FileDrop, paths); data.SetData(InternalFormat, drag.Token, false);
             var effect = DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+            // Remove the click-through preview before validating the final real desktop target.
+            _controller.EndDesktopDrag();
             if (!drag.Handled && !_cancelled)
             {
-                Native.GetCursorPos(out var point);
-                if (Keyboard.Modifiers == ModifierKeys.None && _controller.IsDesktopDrop(point)) _controller.Safe(() => _controller.Assign(paths, null));
+                if (_desktopRelease is { } point) _controller.Safe(() => _controller.DropReferencesOnDesktop(paths, point));
                 if ((effect & DragDropEffects.Move) != 0) _controller.Safe(() => _controller.HandleExternalMove(paths));
             }
         }
-        finally { _controller.ActiveDrag = null; _dragging = false; _preserveMulti = false; _pressedItem = null; ClearInsertion(); }
+        finally { _controller.EndDesktopDrag(); _controller.ActiveDrag = null; _dragging = false; _preserveMulti = false; _pressedItem = null; ClearInsertion(); }
     }
     private ItemDrag? InternalDrag(IDataObject data) => data.GetDataPresent(InternalFormat) && data.GetData(InternalFormat) is string token && _controller.ActiveDrag?.Token == token ? _controller.ActiveDrag : null;
     private DragDropEffects DropEffect(IDataObject data, DragDropEffects allowed) =>
