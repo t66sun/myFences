@@ -1,5 +1,11 @@
 # Change history
 
+## 0.2.1
+
+- Exclude desktop groups, Settings, naming dialogs and drop previews from Alt+Tab using native tool-window styling, without WPF hidden owner windows.
+
+Validation: the live Windows switcher check reproduced the old failure and passed after the fix, including hide/show and absence of hidden owners. Release build and 19 core tests passed.
+
 ## 0.2.0
 
 - Desktop icons dragged out of groups are placed near the release point in group order, avoiding occupied desktop cells and keeping positions visible.

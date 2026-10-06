@@ -51,7 +51,7 @@ internal sealed class FenceWindow : Window
     {
         _controller = controller; _group = group; _preview = preview;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
-        AllowsTransparency = true; Background = Brushes.Transparent; ShowInTaskbar = preview;
+        AllowsTransparency = true; Background = Brushes.Transparent; Theme.ExcludeFromSwitcher(this);
         ShowActivated = false; FontFamily = new("Segoe UI"); FontSize = 12;
         MinWidth = 220; MinHeight = 36;
         var layout = new Grid(); layout.RowDefinitions.Add(new() { Height = new GridLength(36) }); layout.RowDefinitions.Add(new());

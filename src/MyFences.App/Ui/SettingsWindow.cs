@@ -23,6 +23,7 @@ internal sealed class SettingsWindow : Window
 
     public SettingsWindow(AppController controller)
     {
+        Theme.ExcludeFromSwitcher(this);
         _controller = controller; _edited = controller.State.Clone();
         Title = "MyFences · " + Text.Get("settings");
         Width = Math.Min(860, SystemParameters.WorkArea.Width - 32);

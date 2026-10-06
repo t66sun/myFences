@@ -13,6 +13,7 @@ internal static class Program
             using var output = File.Create(args[1]); icon.Save(output); return 0;
         }
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        if (args.Contains("--window-switcher-check")) return WindowSwitcherCheck.Run(app);
         if (args.Contains("--desktop-view")) return app.Run(new DesktopView());
         if (args.Contains("--menu-command-check")) return MenuCommandCheck.Run(app);
         if (args.Contains("--desktop-drop-check")) return DesktopDropCheck.Run(app);

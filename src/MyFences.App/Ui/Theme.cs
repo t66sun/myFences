@@ -2,6 +2,8 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Interop;
+using MyFences.App.Interop;
 
 namespace MyFences.App.Ui;
 
@@ -10,6 +12,16 @@ internal static class Theme
     public static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(36, 48, 68));
     public static readonly Brush Muted = new SolidColorBrush(Color.FromRgb(101, 113, 134));
     public static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(40, 95, 240));
+    public static void ExcludeFromSwitcher(Window window)
+    {
+        // Native tool-window styling avoids WPF's hidden ShowInTaskbar=false owner.
+        window.ShowInTaskbar = true;
+        window.SourceInitialized += (_, _) =>
+        {
+            var handle = new WindowInteropHelper(window).Handle;
+            Native.SetWindowLong(handle, -20, (Native.GetWindowLong(handle, -20) | 0x80) & ~0x40000);
+        };
+    }
     public static void Initialize(Application app)
     {
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/MyFences;component/Ui/Theme.xaml", UriKind.Relative) });

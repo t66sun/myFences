@@ -17,7 +17,7 @@ internal sealed class DesktopDropPreview : Window
     public DesktopDropPreview(Action update)
     {
         WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
-        ShowInTaskbar = false; ShowActivated = false; Topmost = true; ResizeMode = ResizeMode.NoResize;
+        Theme.ExcludeFromSwitcher(this); ShowActivated = false; Topmost = true; ResizeMode = ResizeMode.NoResize;
         Focusable = false; IsHitTestVisible = false; Content = _canvas;
         SourceInitialized += (_, _) =>
         {
